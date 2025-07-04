@@ -38,8 +38,8 @@ const countWeekdaysInclusive = (from:number, to:number) => {
   }
   return c;
 };
-const totalWeekdays = (from:number,to:number)=>
-  countWeekdaysInclusive(from,to-msDay);
+const totalWeekdays = (from: number, to: number) =>
+  countWeekdaysInclusive(from, to - msDay);  // exclude the end marker
 const countWeekdayInRange = (start:number,end:number,wd:number)=>{
   let c=0;
   for(let t=start;t<end;t+=7*msDay){
@@ -63,6 +63,14 @@ function moonPhaseUTC(dateUTC:number):string{
 
 /*─────────── derive() – builds mega‑payload ───────────*/
 function derive(date: Date, tz: string) {
+  // helper: minutes east of UTC for arbitrary IANA zone
+  function offsetMinutes(tzName: string, base: Date): number {
+    // Convert the instant to a clock‑time string in the target zone
+    const localString = base.toLocaleString("en-US", { timeZone: tzName });
+    // Re‑parse that string *as if it were UTC* so we get the correct epoch
+    const sameInstantInTZ = new Date(localString + " UTC");
+    return (sameInstantInTZ.getTime() - base.getTime()) / 60000;
+  }
   /* anchors (UTC) */
   const y = date.getUTCFullYear();
   const m = date.getUTCMonth();
@@ -91,32 +99,9 @@ function derive(date: Date, tz: string) {
   const endOfFiscalQuarter = fiscalQuarter === 4 ? endOfFiscalYear
     : Date.UTC(fyStartYear + (fiscalQuarter >= 3 ? 1 : 0), ((fiscalQuarter % 4) * 3 + 11) % 12, 1);
 
-  /* payload */
+  /* payload (grouped by theme, most‑useful → least‑useful) */
   const payload = {
-    calWeekNumber: Math.floor((startOfWeekSun - startOfYear) / (7*msDay)) + 1,
-    clearTimeLocal: `${new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(date)}T00:00:00`,
-    clearTimeUTC: new Date(Date.UTC(y, m, d)).toISOString().replace(/\.\d{3}Z$/, "Z"),
-    dayOfFiscalQuarter: Math.floor((dateUTC - startOfFiscalQuarter) / msDay) + 1,
-    dayOfFiscalYear: Math.floor((dateUTC - startOfFiscalYear) / msDay) + 1,
-    dayOfMonth: d,
-    dayOfMonthNum: ordWord(d),
-    dayOfMonthOrd: ord(d),
-    dayOfQuarter: Math.floor((dateUTC - startOfQuarter) / msDay) + 1,
-    dayOfQuarterNum: ordWord(Math.floor((dateUTC - startOfQuarter) / msDay) + 1),
-    dayOfQuarterOrd: ord(Math.floor((dateUTC - startOfQuarter) / msDay) + 1),
-    dayOfWeek: weekday,
-    dayOfYear: Math.floor((dateUTC - startOfYear) / msDay) + 1,
-    dayOfYearNum: ordWord(Math.floor((dateUTC - startOfYear) / msDay) + 1),
-    dayOfYearOrd: ord(Math.floor((dateUTC - startOfYear) / msDay) + 1),
-    daysRemainingFiscalQuarter: Math.floor((endOfFiscalQuarter - dateUTC) / msDay),
-    daysRemainingFiscalYear: Math.floor((endOfFiscalYear - dateUTC) / msDay),
-    daysRemainingMonth: Math.floor((endOfMonth - dateUTC) / msDay),
-    daysRemainingQuarter: Math.floor((endOfQuarter - dateUTC) / msDay),
-    daysRemainingWeek: 6 - weekday,
-    daysRemainingYear: Math.floor((endOfYear - dateUTC) / msDay),
-    fiscalQuarter,
-    fiscalWeekNumber: Math.floor((startOfWeekSun - startOfFiscalYear) / (7*msDay)) + 1,
-    fiscalYear: fyStartYear + 1,
+    /* ── Time & ISO identities ───────────────────────── */
     iso: date.toISOString(),
     isoOrdinal: `${y}-${String(Math.floor((dateUTC - startOfYear)/msDay)+1).padStart(3,"0")}`,
     isoWeekNumber: (() => {
@@ -125,34 +110,66 @@ function derive(date: Date, tz: string) {
       const isoWeek1Start = Date.UTC(thu.getUTCFullYear(), 0, 4 - ((new Date(isoYearStart).getUTCDay()+6)%7));
       return Math.floor((startOfWeekSun - isoWeek1Start) / (7*msDay)) + 1;
     })(),
-    isHolidayUS: false,
-    isLeapYear: (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0,
-    isWeekday: weekday >= 1 && weekday <= 5,
-    isWeekend: weekday === 0 || weekday === 6,
+    calWeekNumber: Math.floor((startOfWeekSun - startOfYear) / (7*msDay)) + 1,
+    clearTimeUTC: new Date(Date.UTC(y, m, d)).toISOString().replace(/\.\d{3}Z$/, "Z"),
+    clearTimeLocal: `${new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(date)}T00:00:00`,
+    utcOffsetMinutes: offsetMinutes(tz, date),
+    shortTime: new Intl.DateTimeFormat("en-US",
+      { hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz }).format(date),
+    milTime: new Intl.DateTimeFormat("en-GB",
+      { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }).format(date),
     longDateUTC: date.toUTCString(),
+
+    /* ── Calendar position ───────────────────────────── */
+    dayOfYear: Math.floor((dateUTC - startOfYear) / msDay) + 1,
+    dayOfYearOrd: ord(Math.floor((dateUTC - startOfYear) / msDay) + 1),
+    dayOfYearNum: ordWord(Math.floor((dateUTC - startOfYear) / msDay) + 1),
+    dayOfQuarter: Math.floor((dateUTC - startOfQuarter) / msDay) + 1,
+    dayOfQuarterOrd: ord(Math.floor((dateUTC - startOfQuarter) / msDay) + 1),
+    dayOfQuarterNum: ordWord(Math.floor((dateUTC - startOfQuarter) / msDay) + 1),
+    dayOfMonth: d,
+    dayOfMonthOrd: ord(d),
+    dayOfMonthNum: ordWord(d),
+    dayOfWeek: weekday,
+    minDayName: new Intl.DateTimeFormat("en-US", { weekday:"narrow", timeZone: tz }).format(date),
     longDayName: new Intl.DateTimeFormat("en-US", { weekday:"long", timeZone:"UTC" }).format(date),
     longMonthName: new Intl.DateTimeFormat("en-US", { month:"long",  timeZone:"UTC" }).format(date),
     longYear: y,
-    milTime: new Intl.DateTimeFormat("en-GB",{hourCycle:"h23",hour:"2-digit",minute:"2-digit",timeZone:tz}).format(date),
-    moonPhase: moonPhaseUTC(dateUTC),
+
+    /* ── Fiscal calendar (FY starts Dec‑01) ──────────── */
+    fiscalYear: fyStartYear + 1,
+    fiscalQuarter,
+    fiscalWeekNumber: Math.floor((startOfWeekSun - startOfFiscalYear) / (7*msDay)) + 1,
+    dayOfFiscalYear: Math.floor((dateUTC - startOfFiscalYear) / msDay) + 1,
+    dayOfFiscalQuarter: Math.floor((dateUTC - startOfFiscalQuarter) / msDay) + 1,
+
+    /* ── Remaining‑days counters ─────────────────────── */
+    daysRemainingWeek: 6 - weekday,
+    daysRemainingMonth: Math.floor((endOfMonth        - dateUTC) / msDay) - 1,
+    daysRemainingQuarter: Math.floor((endOfQuarter      - dateUTC) / msDay) - 1,
+    daysRemainingYear: Math.floor((endOfYear         - dateUTC) / msDay) - 1,
+    daysRemainingFiscalQuarter: Math.floor((endOfFiscalQuarter - dateUTC) / msDay) - 1,
+    daysRemainingFiscalYear:    Math.floor((endOfFiscalYear    - dateUTC) / msDay) - 1,
+
+    /* ── Weekday statistics ──────────────────────────── */
     sameDaysInMonth: countWeekdayInRange(startOfMonth, endOfMonth, weekday),
     sameDaysInQuarter: countWeekdayInRange(startOfQuarter, endOfQuarter, weekday),
     sameDaysInYear: countWeekdayInRange(startOfYear, endOfYear, weekday),
     totalWeekdaysInMonth: totalWeekdays(startOfMonth, endOfMonth),
     totalWeekdaysInQuarter: totalWeekdays(startOfQuarter, endOfQuarter),
     totalWeekdaysInYear: totalWeekdays(startOfYear, endOfYear),
-    tz,
-    utcOffsetMinutes: -date.getTimezoneOffset(),
-    weekdayName: new Intl.DateTimeFormat("en-US", { weekday:"long", timeZone: tz }).format(date),
-    weekdayNameShort: new Intl.DateTimeFormat("en-US", { weekday:"short", timeZone: tz }).format(date),
-    weekdayNameMin: new Intl.DateTimeFormat("en-US", { weekday:"narrow", timeZone: tz }).format(date),
-    weekNumber: Math.floor((startOfWeekSun - startOfYear) / (7*msDay)) + 1,
-    year: y,
+
+    /* ── Booleans / flags ────────────────────────────── */
+    isLeapYear: (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0,
+    isWeekday: weekday >= 1 && weekday <= 5,
+    isWeekend: weekday === 0 || weekday === 6,
+    isHolidayUS: false,
+
+    /* ── Miscellaneous ───────────────────────────────── */
+    moonPhase: moonPhaseUTC(dateUTC)
   };
 
-  return Object.fromEntries(
-    Object.entries(payload).sort(([a], [b]) => a.localeCompare(b))
-  );
+  return payload;
 }
 
 
