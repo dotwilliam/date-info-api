@@ -1,0 +1,27 @@
+name: Publish Worker
+
+on:
+  push:
+    branches: [ main ]          # deploy every push to main
+  workflow_dispatch:            # allow manual trigger
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Publish to Cloudflare Workers
+        run: npx wrangler publish
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID:        ${{ secrets.CF_ACCOUNT_ID }}
