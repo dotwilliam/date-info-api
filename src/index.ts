@@ -77,6 +77,8 @@ function derive(date: Date, tz: string) {
   const d = date.getUTCDate();
   // e.g. 1 for first Monday of the month, 2 for second, … 5 at most
   const occurrenceOfMonth = Math.ceil(d / 7);
+  const occurrenceOfMonthOrd = ord(occurrenceOfMonth);
+  const occurrenceOfMonthNum = ordWord(occurrenceOfMonth);
   const weekday = date.getUTCDay();
   const dateUTC = Date.UTC(y, m, d);
 
@@ -178,6 +180,8 @@ function derive(date: Date, tz: string) {
     dayOfMonthOrd: ord(d),
     dayOfMonthNum: ordWord(d),
     occurrenceOfMonth,
+    occurrenceOfMonthOrd,
+    occurrenceOfMonthNum,
     dayOfWeekNum: weekday,
     shortDayName: shortDayName,
     minDayName: new Intl.DateTimeFormat("en-US", { weekday:"narrow", timeZone: tz }).format(date),
