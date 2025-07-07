@@ -75,6 +75,8 @@ function derive(date: Date, tz: string) {
   const y = date.getUTCFullYear();
   const m = date.getUTCMonth();
   const d = date.getUTCDate();
+  // e.g. 1 for first Monday of the month, 2 for second, … 5 at most
+  const occurrenceOfMonth = Math.ceil(d / 7);
   const weekday = date.getUTCDay();
   const dateUTC = Date.UTC(y, m, d);
 
@@ -99,6 +101,52 @@ function derive(date: Date, tz: string) {
   const endOfFiscalQuarter = fiscalQuarter === 4 ? endOfFiscalYear
     : Date.UTC(fyStartYear + (fiscalQuarter >= 3 ? 1 : 0), ((fiscalQuarter % 4) * 3 + 11) % 12, 1);
 
+  // New helpers for short/long date, short names, etc.
+  const shortDate  = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(date);                       // YYYY‑MM‑DD
+  const longDate   = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: tz }).format(date);
+  const shortDayName  = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: tz }).format(date);
+  const shortMonthName = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(date);
+  const shortYear  = String(y).slice(-2);
+
+  // derive a zone abbreviation from the provided tz or from the offset embedded in the ISO string
+  const deriveAbbrev = (): string => {
+    try {
+      // If an explicit IANA zone is provided, let Intl give us the short name
+      if (tz && tz !== "UTC") {
+        const sample = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          hour: "numeric",
+          timeZoneName: "short"
+        }).format(date);
+        const match = sample.match(/\b([A-Z]{2,5})$/);
+        if (match) return match[1];
+      }
+    } catch (_) {
+      /* fall through */
+    }
+    // No tz param (or UTC) – fall back to offset‑based label like "UTC‑07"
+    const offMin = -date.getTimezoneOffset();           // minutes east of UTC
+    if (offMin === 0) return "UTC";
+    const sign = offMin > 0 ? "+" : "‑";
+    const hh = String(Math.abs(Math.trunc(offMin / 60))).padStart(2, "0");
+    return `UTC${sign}${hh}`;
+  };
+  const tzAbbrev = deriveAbbrev();
+
+  const shortTimeTZ = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: tz
+  }).format(date).replace("AM", "am").replace("PM", "pm") + " " + tzAbbrev;
+
+  const milTimeTZ = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: tz
+  }).format(date) + " " + tzAbbrev;
+
   /* payload (grouped by theme, most‑useful → least‑useful) */
   const payload = {
     /* ── Time & ISO identities ───────────────────────── */
@@ -113,11 +161,10 @@ function derive(date: Date, tz: string) {
     calWeekNumber: Math.floor((startOfWeekSun - startOfYear) / (7*msDay)) + 1,
     clearTimeUTC: new Date(Date.UTC(y, m, d)).toISOString().replace(/\.\d{3}Z$/, "Z"),
     clearTimeLocal: `${new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(date)}T00:00:00`,
-    utcOffsetMinutes: offsetMinutes(tz, date),
-    shortTime: new Intl.DateTimeFormat("en-US",
-      { hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz }).format(date),
-    milTime: new Intl.DateTimeFormat("en-GB",
-      { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }).format(date),
+    shortDate: shortDate,
+    longDate:  longDate,
+    shortTime: shortTimeTZ,
+    milTime: milTimeTZ,
     longDateUTC: date.toUTCString(),
 
     /* ── Calendar position ───────────────────────────── */
@@ -130,8 +177,12 @@ function derive(date: Date, tz: string) {
     dayOfMonth: d,
     dayOfMonthOrd: ord(d),
     dayOfMonthNum: ordWord(d),
-    dayOfWeek: weekday,
+    occurrenceOfMonth,
+    dayOfWeekNum: weekday,
+    shortDayName: shortDayName,
     minDayName: new Intl.DateTimeFormat("en-US", { weekday:"narrow", timeZone: tz }).format(date),
+    shortMonthName: shortMonthName,
+    shortYear: shortYear,
     longDayName: new Intl.DateTimeFormat("en-US", { weekday:"long", timeZone:"UTC" }).format(date),
     longMonthName: new Intl.DateTimeFormat("en-US", { month:"long",  timeZone:"UTC" }).format(date),
     longYear: y,
